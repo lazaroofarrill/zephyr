@@ -11,7 +11,7 @@ LOG_MODULE_REGISTER(net_if, CONFIG_NET_IF_LOG_LEVEL);
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/linker/sections.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <zephyr/syscall_handler.h>
 #include <stdlib.h>
 #include <string.h>
@@ -348,7 +348,7 @@ void net_if_queue_tx(struct net_if *iface, struct net_pkt *pkt)
 	 * directly to the driver.
 	 */
 	if ((IS_ENABLED(CONFIG_NET_TC_SKIP_FOR_HIGH_PRIO) &&
-	     prio == NET_PRIORITY_CA) || NET_TC_TX_COUNT == 0) {
+	     prio >= NET_PRIORITY_CA) || NET_TC_TX_COUNT == 0) {
 		net_pkt_set_tx_stats_tick(pkt, k_cycle_get_32());
 
 		net_if_tx(net_pkt_iface(pkt), pkt);
@@ -4618,8 +4618,12 @@ bool net_if_is_suspended(struct net_if *iface)
 #endif /* CONFIG_NET_POWER_MANAGEMENT */
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP_THREAD)
-static void net_tx_ts_thread(void)
+static void net_tx_ts_thread(void *p1, void *p2, void *p3)
 {
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
 	struct net_pkt *pkt;
 
 	NET_DBG("Starting TX timestamp callback thread");
@@ -4880,7 +4884,7 @@ void net_if_init(void)
 #if defined(CONFIG_NET_PKT_TIMESTAMP_THREAD)
 	k_thread_create(&tx_thread_ts, tx_ts_stack,
 			K_KERNEL_STACK_SIZEOF(tx_ts_stack),
-			(k_thread_entry_t)net_tx_ts_thread,
+			net_tx_ts_thread,
 			NULL, NULL, NULL, K_PRIO_COOP(1), 0, K_NO_WAIT);
 	k_thread_name_set(&tx_thread_ts, "tx_tstamp");
 #endif /* CONFIG_NET_PKT_TIMESTAMP_THREAD */
