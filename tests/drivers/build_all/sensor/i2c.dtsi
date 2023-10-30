@@ -799,3 +799,9 @@ test_i2c_tsl2561: tsl2561@78 {
 	compatible = "ams,tsl2561";
 	reg = <0x78>;
 };
+
+test_i2c_icm2094@69 {
+	compatible = "invensense,icm20948";
+	reg = <0x69>
+	status = "okay";
+}

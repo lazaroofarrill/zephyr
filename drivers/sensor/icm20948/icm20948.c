@@ -4,15 +4,13 @@
  *
  */
 
-#include "zephyr/drivers/sensor.h"
-#include <errno.h>
-#include <stdint.h>
 #define DT_DRV_COMPAT invensense_icm20948
 
-#include "zephyr/logging/log.h"
-#include "zephyr/devicetree.h"
-#include "zephyr/sys/byteorder.h"
-
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/init.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/__assert.h>
 #include "icm20948.h"
 
 #define ICM20948_READ_BUF_SIZE 120
@@ -88,9 +86,30 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 
 	LOG_ERR("TODO");
 }
-static const struct sensor_driver_api icm20948_driver_api = {.sample_fetch = icm20948_};
+static const struct sensor_driver_api icm20948_driver_api = {.sample_fetch = icm20948_sample_fetch,
+							     .channel_get = icm20948_channel_get};
 
 static int icm20948_init(const struct device *dev)
 {
 	struct icm20948_data *drv_data = dev->data;
+	const struct icm20948_config *cfg = dev->config;
+
+	if (!i2c_is_ready_dt(&cfg->i2c)) {
+		LOG_ERR("I2C bus is not ready.");
+		return -ENODEV;
+	}
+
+	return 0;
 }
+
+#define ICM2048_DEFINE(inst)                                                                       \
+	static struct icm20948_data icm20948_data_##inst;                                          \
+                                                                                                   \
+	static const struct icm20948_config icm20948_config##inst = {                              \
+		.i2c = I2C_DT_SPEC_INST_GET(inst)};                                                \
+                                                                                                   \
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, icm20948_init, NULL, &icm20948_data_##inst,             \
+				     &icm20948_config##inst, POST_KERNEL,                          \
+				     CONFIG_SENSOR_INIT_PRIORITY, &icm20948_driver_api);
+
+DT_INST_FOREACH_STATUS_OKAY(ICM2048_DEFINE)
