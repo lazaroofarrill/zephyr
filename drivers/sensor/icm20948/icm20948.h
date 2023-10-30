@@ -31,7 +31,7 @@ struct icm20948_data {
 };
 
 struct icm20948_config {
-	const struct i2c_dt_spec i2c;
+	struct i2c_dt_spec i2c;
 	uint8_t gyro_sr_div;
 	uint8_t gyro_dlpf;
 	uint8_t gyro_fs;
