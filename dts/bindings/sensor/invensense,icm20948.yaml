@@ -1,0 +1,10 @@
+# Copyright (c) 2021 Nordic Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  ICM20948 Motion sensor by invensense
+
+compatible: "invensense,icm20948"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
