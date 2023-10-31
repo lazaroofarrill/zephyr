@@ -19,7 +19,7 @@ struct icm20948_data {
 	int16_t magn_z;
 };
 
-struct icm20948_dev_config {
+struct icm20948_config {
 	struct i2c_dt_spec i2c;
 	uint8_t accel_fs;
 	uint16_t gyro_fs;
@@ -54,5 +54,21 @@ typedef enum {
 	GYRO_FS_1000 = 2 << 1,
 	GYRO_FS_2000 = 3 << 1,
 } gyro_fs_sel;
+
+typedef enum {
+	GYRO_DLPFCFG_0 = 0 << 3,
+	GYRO_DLPFCFG_1 = 1 << 3,
+	GYRO_DLPFCFG_2 = 2 << 3,
+	GYRO_DLPFCFG_3 = 2 << 3,
+	GYRO_DLPFCFG_4 = 4 << 3,
+	GYRO_DLPFCFG_5 = 5 << 3,
+	GYRO_DLPFCFG_6 = 6 << 3,
+	GYRO_DLPFCFG_7 = 7 << 3,
+} gyro_dlpfcfg;
+
+typedef enum {
+	GYRO_F_DISABLE, // Disable low pass filter
+	GYRO_F_ENABLE   // Enable low pass filter
+} gyro_fchoice;
 
 #endif /* ZEPHYR_DRIVERS_SENSOR_ICM20948_H_ */
