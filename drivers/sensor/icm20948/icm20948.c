@@ -4,6 +4,9 @@
  *
  */
 
+#include "zephyr/kernel.h"
+#include "zephyr/sys/util.h"
+#include <stdint.h>
 #define DT_DRV_COMPAT invensense_icm20948
 
 #include <zephyr/drivers/i2c.h>
@@ -11,6 +14,7 @@
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/__assert.h>
+#include "stdio.h"
 #include "icm20948.h"
 
 //
@@ -96,23 +100,23 @@
 #define REG_BANK_SEL 0x7F
 
 //// declarations
-//static int selectBank(uint8_t bank);
+// static int selectBank(uint8_t bank);
 //
-//static int wakeUp();
+// static int wakeUp();
 //
-//static int reset();
+// static int reset();
 //
-//static int config_accel();
+// static int config_accel();
 //
-//static int config_gyro();
+// static int config_gyro();
 //
-//static int config_mag();
+// static int config_mag();
 //
-//static int self_test();
+// static int self_test();
 //
 //// definitions
 //
-//int initImu(uint8_t address) {
+// int initImu(uint8_t address) {
 //    int err = 0;
 //
 //    if (address != 0x68 && address != 0x69) {
@@ -161,7 +165,7 @@
 //    return err;
 //}
 //
-//int imu_read_sensors() {
+// int imu_read_sensors() {
 //    int err;
 //
 //    const uint8_t readings[12] = {0};
@@ -191,7 +195,7 @@
 //    return err;
 //}
 //
-//int selectBank(uint8_t bank) {
+// int selectBank(uint8_t bank) {
 //    if (bank > 3) {
 //        return ESP_ERR_INVALID_ARG;
 //    }
@@ -256,19 +260,19 @@
 //
 
 //
-//typedef enum {
+// typedef enum {
 //    GYRO_F_DISABLE, // Disable low pass filter
 //    GYRO_F_ENABLE   // Enable low pass filter
 //} gyro_fchoice;
 //
 typedef enum {
-    GYRO_FS_250 = 0 << 1,
-    GYRO_FS_500 = 1 << 1,
-    GYRO_FS_1000 = 2 << 1,
-    GYRO_FS_2000 = 3 << 1,
+	GYRO_FS_250 = 0 << 1,
+	GYRO_FS_500 = 1 << 1,
+	GYRO_FS_1000 = 2 << 1,
+	GYRO_FS_2000 = 3 << 1,
 } gyro_fs_sel;
 //
-//typedef enum {
+// typedef enum {
 //    GYRO_DLPFCFG_0 = 0 << 3,
 //    GYRO_DLPFCFG_1 = 1 << 3,
 //    GYRO_DLPFCFG_2 = 2 << 3,
@@ -279,7 +283,7 @@ typedef enum {
 //    GYRO_DLPFCFG_7 = 7 << 3,
 //} gyro_dlpfcfg;
 //
-//int config_gyro() {
+// int config_gyro() {
 //    int err;
 //    uint8_t gyroConfig1Reg;
 //
@@ -314,33 +318,33 @@ typedef enum {
 //    return err;
 //}
 //
-//int config_mag() {
+// int config_mag() {
 //    return 0;
 //}
 //
-//typedef enum {
+// typedef enum {
 //    AX_ST_EN_REG_DISABLE = 0 << 4,
 //    AX_ST_EN_REG_ENABLE = 1 << 4,
 //} ax_st_en_reg;
 //
-//typedef enum {
+// typedef enum {
 //    AY_ST_EN_REG_DISABLE = 0 << 3,
 //    AY_ST_EN_REG_ENABLE = 1 << 3,
 //} ay_st_en_reg;
 //
-//typedef enum {
+// typedef enum {
 //    AZ_ST_EN_REG_DISABLE = 0 << 2,
 //    AZ_ST_EN_REG_ENABLE = 1 << 2,
 //} az_st_en_reg;
 //
-//typedef enum {
+// typedef enum {
 //    DEC3_CFG_1_4,
 //    DEC3_CFG_8,
 //    DEC3_CFG_16,
 //    DEC3_CFG_32,
 //} dec3_cfg;
 //
-//int self_test() {
+// int self_test() {
 //    int err;
 //    uint8_t accelConfig2Register;
 //
@@ -433,257 +437,292 @@ typedef enum {
 // New code
 
 #define ICM20948_READ_BUF_SIZE 120
-
 LOG_MODULE_REGISTER(ICM20948, CONFIG_SENSOR_LOG_LEVEL);
 
-static int icm20948_bank_select(const struct device *dev, uint8_t bank) {
-    if (bank > 3) {
-        return -EINVAL;
-    }
+static int icm20948_bank_select(const struct device *dev, uint8_t bank)
+{
+	if (bank > 3) {
+		return -EINVAL;
+	}
 
-    const struct icm20948_config *cfg = dev->config;
+	const struct icm20948_config *cfg = dev->config;
 
-    const uint8_t reg_bank_mask = 0x30;
-    int ret = i2c_reg_update_byte_dt(&cfg->i2c,
-                                     REG_BANK_SEL,
-                                     reg_bank_mask,
-                                     bank << 4);
-    if (ret) {
-        LOG_ERR("Error switching banks");
-        return ret;
-    }
+	const uint8_t reg_bank_mask = 0x30;
+	int ret = i2c_reg_update_byte_dt(&cfg->i2c, REG_BANK_SEL, reg_bank_mask, bank << 4);
+	if (ret) {
+		LOG_ERR("Error switching banks");
+		return ret;
+	}
 
-    return 0;
+	return 0;
+}
+
+#define ROOM_TEMP_OFFSET_DEG 21
+#define TEMP_SENSITIVITY     333.87
+
+static int icm20948_convert_temp(struct sensor_value *val, int16_t raw_val)
+{
+	float temp_deg = ((raw_val - ROOM_TEMP_OFFSET_DEG) / TEMP_SENSITIVITY) + 21;
+	sensor_value_from_float(val, temp_deg);
 }
 
 static void icm20948_convert_accel(struct sensor_value *val, int16_t raw_val,
-                                   uint16_t sensitivity_shift) {
-    int64_t conv_val;
-    conv_val = ((int64_t) raw_val * SENSOR_G) >> sensitivity_shift;
-    val->val1 = (int32_t) (conv_val / 1000000);
-    val->val2 = (int32_t) (conv_val % 1000000);
+				   uint16_t sensitivity_shift)
+{
+	int64_t conv_val;
+	conv_val = ((int64_t)raw_val * SENSOR_G) >> sensitivity_shift;
+	val->val1 = (int32_t)(conv_val / 1000000);
+	val->val2 = (int32_t)(conv_val % 1000000);
 }
 
-static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint8_t gyro_fs) {
-    int64_t sensitivity = 0; /* value equivalent for 10x gyro reading deg/s */
+static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint8_t gyro_fs)
+{
+	int64_t sensitivity = 0; /* value equivalent for 10x gyro reading deg/s */
 
-    switch (gyro_fs) {
-        case GYRO_FS_250:
-            sensitivity = 1310;
-            break;
-        case GYRO_FS_500:
-            sensitivity = 655;
-            break;
-        case GYRO_FS_1000:
-            sensitivity = 328;
-            break;
-        case GYRO_FS_2000:
-            sensitivity = 164;
-            break;
-        default:
-            return -EINVAL;
-    }
+	switch (gyro_fs) {
+	case GYRO_FS_250:
+		sensitivity = 1310;
+		break;
+	case GYRO_FS_500:
+		sensitivity = 655;
+		break;
+	case GYRO_FS_1000:
+		sensitivity = 328;
+		break;
+	case GYRO_FS_2000:
+		sensitivity = 164;
+		break;
+	default:
+		return -EINVAL;
+	}
 
-    int64_t in10_rads = (int64_t) raw_val * SENSOR_PI * 10LL;
+	int64_t in10_rads = (int64_t)raw_val * SENSOR_PI * 10LL;
 
-/* Whole rad/s */
-    val->val1 = (int32_t) (in10_rads / (sensitivity * 180LL * 1000000LL));
+	/* Whole rad/s */
+	val->val1 = (int32_t)(in10_rads / (sensitivity * 180LL * 1000000LL));
 
-/* microrad/s */
-    val->val2 = (int32_t) ((in10_rads - (val->val1 * sensitivity * 180LL * 1000000LL)) / (sensitivity * 180LL));
+	/* microrad/s */
+	val->val2 = (int32_t)((in10_rads - (val->val1 * sensitivity * 180LL * 1000000LL)) /
+			      (sensitivity * 180LL));
 
-    return 0;
+	return 0;
 }
 
+static int icm20948_convert_mgn(struct sensor_value *val, int16_t raw_val)
+{
+	const double k_magnetic_flux_density = 4912.0;
+	double flux_value = raw_val * k_magnetic_flux_density / INT16_MAX;
+	int res = sensor_value_from_double(val, flux_value);
+	if (res) {
+		return res;
+	}
 
-static int icm20948_convert_mgn(struct sensor_value *val, int16_t raw_val) {
-    const double k_magnetic_flux_density = 4912.0;
-    double flux_value = raw_val * k_magnetic_flux_density / INT16_MAX;
-    int res = sensor_value_from_double(val, flux_value);
-    if (res) {
-        return res;
-    }
-
-    return 0;
+	return 0;
 }
 
 static int icm20948_channel_get(const struct device *dev, enum sensor_channel chan,
-                                struct sensor_value *val) {
-    struct icm20948_data *drv_data = dev->data;
+				struct sensor_value *val)
+{
+	struct icm20948_data *drv_data = dev->data;
 
-    switch (chan) {
-        case SENSOR_CHAN_ACCEL_XYZ:
-            icm20948_convert_accel(val, drv_data->accel_x, drv_data->accel_sensitivity_shift);
-            icm20948_convert_accel(val + 1, drv_data->accel_y,
-                                   drv_data->accel_sensitivity_shift);
-            icm20948_convert_accel(val + 2, drv_data->accel_z,
-                                   drv_data->accel_sensitivity_shift);
-            break;
-        case SENSOR_CHAN_ACCEL_X:
-            icm20948_convert_accel(val, drv_data->accel_x, drv_data->accel_sensitivity_shift);
-            break;
-        case SENSOR_CHAN_ACCEL_Y:
-            icm20948_convert_accel(val, drv_data->accel_y, drv_data->accel_sensitivity_shift);
-            break;
-        case SENSOR_CHAN_ACCEL_Z:
-            icm20948_convert_accel(val, drv_data->accel_z, drv_data->accel_sensitivity_shift);
-            break;
-        case SENSOR_CHAN_GYRO_XYZ:
-            icm20948_convert_gyro(val, drv_data->gyro_x, drv_data->gyro_fs);
-            icm20948_convert_gyro(val + 1, drv_data->gyro_y, drv_data->gyro_fs);
-            icm20948_convert_gyro(val + 2, drv_data->gyro_z, drv_data->gyro_fs);
-            break;
-        case SENSOR_CHAN_GYRO_X:
-            icm20948_convert_gyro(val, drv_data->gyro_x, drv_data->gyro_fs);
-            break;
-        case SENSOR_CHAN_GYRO_Y:
-            icm20948_convert_gyro(val, drv_data->gyro_y, drv_data->gyro_fs);
-            break;
-        case SENSOR_CHAN_GYRO_Z:
-            icm20948_convert_gyro(val, drv_data->gyro_z, drv_data->gyro_fs);
-            break;
-        case SENSOR_CHAN_MAGN_XYZ:
-            icm20948_convert_mgn(val, drv_data->magn_x);
-            icm20948_convert_mgn(val + 1, drv_data->magn_y);
-            icm20948_convert_mgn(val + 2, drv_data->magn_z);
-            break;
-        case SENSOR_CHAN_MAGN_X:
-            icm20948_convert_mgn(val, drv_data->magn_x);
-            break;
-        case SENSOR_CHAN_MAGN_Y:
-            icm20948_convert_mgn(val, drv_data->magn_y);
-            break;
-        case SENSOR_CHAN_MAGN_Z:
-            icm20948_convert_mgn(val, drv_data->magn_z);
-            break;
-        default:
-            return -ENOTSUP;
-    }
-    return 0;
+	switch (chan) {
+	case SENSOR_CHAN_DIE_TEMP:
+		icm20948_convert_temp(val, drv_data->temp);
+		break;
+	case SENSOR_CHAN_ACCEL_XYZ:
+		icm20948_convert_accel(val, drv_data->accel_x, drv_data->accel_sensitivity_shift);
+		icm20948_convert_accel(val + 1, drv_data->accel_y,
+				       drv_data->accel_sensitivity_shift);
+		icm20948_convert_accel(val + 2, drv_data->accel_z,
+				       drv_data->accel_sensitivity_shift);
+		break;
+	case SENSOR_CHAN_ACCEL_X:
+		icm20948_convert_accel(val, drv_data->accel_x, drv_data->accel_sensitivity_shift);
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		icm20948_convert_accel(val, drv_data->accel_y, drv_data->accel_sensitivity_shift);
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		icm20948_convert_accel(val, drv_data->accel_z, drv_data->accel_sensitivity_shift);
+		break;
+	case SENSOR_CHAN_GYRO_XYZ:
+		icm20948_convert_gyro(val, drv_data->gyro_x, drv_data->gyro_fs);
+		icm20948_convert_gyro(val + 1, drv_data->gyro_y, drv_data->gyro_fs);
+		icm20948_convert_gyro(val + 2, drv_data->gyro_z, drv_data->gyro_fs);
+		break;
+	case SENSOR_CHAN_GYRO_X:
+		icm20948_convert_gyro(val, drv_data->gyro_x, drv_data->gyro_fs);
+		break;
+	case SENSOR_CHAN_GYRO_Y:
+		icm20948_convert_gyro(val, drv_data->gyro_y, drv_data->gyro_fs);
+		break;
+	case SENSOR_CHAN_GYRO_Z:
+		icm20948_convert_gyro(val, drv_data->gyro_z, drv_data->gyro_fs);
+		break;
+	case SENSOR_CHAN_MAGN_XYZ:
+		icm20948_convert_mgn(val, drv_data->magn_x);
+		icm20948_convert_mgn(val + 1, drv_data->magn_y);
+		icm20948_convert_mgn(val + 2, drv_data->magn_z);
+		break;
+	case SENSOR_CHAN_MAGN_X:
+		icm20948_convert_mgn(val, drv_data->magn_x);
+		break;
+	case SENSOR_CHAN_MAGN_Y:
+		icm20948_convert_mgn(val, drv_data->magn_y);
+		break;
+	case SENSOR_CHAN_MAGN_Z:
+		icm20948_convert_mgn(val, drv_data->magn_z);
+		break;
+	default:
+		return -ENOTSUP;
+	}
+	return 0;
 }
 
-static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel chan) {
-    struct icm20948_data *drv_data = dev->data;
-    const struct icm20948_config *cfg = dev->config;
+#define SENS_READ_BUFF_LEN 16
 
-    __ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL); //TODO support single channel fetch
+static bool icm20948_ready_to_read(const struct device *dev)
+{
+	const struct icm20948_config *cfg = dev->config;
+	uint8_t ready_to_read = 0;
 
+	int ret = i2c_reg_read_byte_dt(&cfg->i2c, INT_STATUS_1, &ready_to_read);
+	if (ret) {
+		LOG_ERR("data not ready to read.\n");
+		return false;
+	}
 
-    uint8_t read_buff[12];
+	return ready_to_read;
+}
 
+static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel chan)
+{
+	struct icm20948_data *drv_data = dev->data;
+	const struct icm20948_config *cfg = dev->config;
 
-    icm20948_bank_select(dev, 0);
+	__ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL); // TODO support single channel fetch
 
-    int err = i2c_burst_read_dt(&cfg->i2c, ACCEL_XOUT_H, read_buff, 12);
-    if (err) {
-        LOG_ERR("Error reading acc and gyro values");
-        return err;
-    }
+	uint8_t read_buff[SENS_READ_BUFF_LEN];
 
-    drv_data->accel_x = (int16_t) (read_buff[0] << 8 | read_buff[1]);
-    drv_data->accel_y = (int16_t) (read_buff[2] << 8 | read_buff[3]);
-    drv_data->accel_z = (int16_t) (read_buff[4] << 8 | read_buff[5]);
-    drv_data->gyro_x = (int16_t) (read_buff[6] << 8 | read_buff[7]);
-    drv_data->gyro_y = (int16_t) (read_buff[8] << 8 | read_buff[9]);
-    drv_data->gyro_z = (int16_t) (read_buff[10] << 8 | read_buff[11]);
+	icm20948_bank_select(dev, 0);
 
-    printf("accX: %d.%d\n", read_buff[0], read_buff[1]);
-    printf("accY: %d.%d\n", read_buff[2], read_buff[3]);
-    printf("accZ: %d.%d\n", read_buff[4], read_buff[5]);
+	printk("sensor ready: %d\n", icm20948_ready_to_read(dev));
 
-    return 0;
+	int err = i2c_burst_read_dt(&cfg->i2c, ACCEL_XOUT_H, read_buff, SENS_READ_BUFF_LEN);
+	if (err) {
+		LOG_ERR("Error reading acc and gyro values");
+		return err;
+	}
+
+	drv_data->accel_x = (int16_t)(read_buff[0] << 8 | read_buff[1]);
+	drv_data->accel_y = (int16_t)(read_buff[2] << 8 | read_buff[3]);
+	drv_data->accel_z = (int16_t)(read_buff[4] << 8 | read_buff[5]);
+	drv_data->gyro_x = (int16_t)(read_buff[6] << 8 | read_buff[7]);
+	drv_data->gyro_y = (int16_t)(read_buff[8] << 8 | read_buff[9]);
+	drv_data->gyro_z = (int16_t)(read_buff[10] << 8 | read_buff[11]);
+	drv_data->temp = (int16_t)(read_buff[12] << 8 | read_buff[13]);
+
+	return 0;
 }
 
 static const struct sensor_driver_api icm20948_driver_api = {.sample_fetch = icm20948_sample_fetch,
-        .channel_get = icm20948_channel_get};
+							     .channel_get = icm20948_channel_get};
 
-int icm20948_wake_up(const struct device *dev) {
+int icm20948_wake_up(const struct device *dev)
+{
+	icm20948_bank_select(dev, 0);
 
-    const struct icm20948_config *cfg = dev->config;
+	const struct icm20948_config *cfg = dev->config;
 
-    int err = i2c_reg_update_byte_dt(&cfg->i2c, PWR_MGMT_1, 0xBF, 0x00);
-    if (err) {
-        LOG_ERR("Error waking up device.");
-        return err;
-    }
+	int err = i2c_reg_update_byte_dt(&cfg->i2c, PWR_MGMT_1, GENMASK(6, 6), 0x00);
+	if (err) {
+		LOG_ERR("Error waking up device.");
+		return err;
+	}
 
-    return 0;
+	return 0;
 }
 
-int icm20948_reset(const struct device *dev) {
-    const struct icm20948_config *cfg = dev->config;
+int icm20948_reset(const struct device *dev)
+{
+	const struct icm20948_config *cfg = dev->config;
 
-    int err = i2c_reg_update_byte_dt(&cfg->i2c, PWR_MGMT_1, 0x80, 0xFF);
-    if (err) {
-        LOG_ERR("Error resetting device.");
-        return err;
-    }
+	icm20948_bank_select(dev, 0);
 
-    k_sleep(K_USEC(100));
+	int err = i2c_reg_update_byte_dt(&cfg->i2c, PWR_MGMT_1, GENMASK(7, 7), 0xFF);
+	if (err) {
+		LOG_ERR("Error resetting device.");
+		return err;
+	}
 
-    return 0;
+	k_sleep(K_MSEC(1));
+
+	return 0;
 }
 
-int icm20948_accel_config(const struct device *dev) {
-    const struct icm20948_config *cfg = dev->config;
-    int err;
+int icm20948_accel_config(const struct device *dev)
+{
+	const struct icm20948_config *cfg = dev->config;
+	int err;
 
-    uint8_t accelConfigReg;
+	uint8_t accelConfigReg;
 
-    err = i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG, &accelConfigReg);
-    if (err) {
-        return err;
-    }
+	err = i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG, &accelConfigReg);
+	if (err) {
+		return err;
+	}
 
+	accelConfigReg = accelConfigReg & GENMASK(7, 6);
 
-    accelConfigReg = accelConfigReg & 0xC0;
+	accelConfigReg = accelConfigReg | ACCEL_DLPFCFG_0 | ACCEL_FS_SEL_2G |
+			 ACCEL_FCHOICE_ENABLE; // TODO make this variable configurable in the sensor
 
-    accelConfigReg = accelConfigReg | ACCEL_DLPFCFG_0 | ACCEL_FS_SEL_2G |
-                     ACCEL_FCHOICE_ENABLE; //TODO make this variable configurable in the sensor
+	err = i2c_reg_write_byte_dt(&cfg->i2c, ACCEL_CONFIG, accelConfigReg);
+	if (err) {
+		return err;
+	}
 
-    err = i2c_reg_write_byte_dt(&cfg->i2c, ACCEL_CONFIG, accelConfigReg);
-    if (err) {
-        return err;
-    }
-
-    return err;
+	return err;
 }
 
-static int icm20948_init(const struct device *dev) {
-    const struct icm20948_config *cfg = dev->config;
-    struct icm20948_data *dev_data = dev->data;
+static int icm20948_init(const struct device *dev)
+{
+	const struct icm20948_config *cfg = dev->config;
+	struct icm20948_data *dev_data = dev->data;
 
-    if (!i2c_is_ready_dt(&cfg->i2c)) {
-        LOG_ERR("I2C bus is not ready.");
-        return -ENODEV;
-    }
+	if (!i2c_is_ready_dt(&cfg->i2c)) {
+		LOG_ERR("I2C bus is not ready.");
+		return -ENODEV;
+	}
 
-    // read gyro scale factor
-    icm20948_bank_select(dev, 2);
-    uint8_t reusable_register = 0; //register to reuse
-    i2c_reg_read_byte_dt(&cfg->i2c, GYRO_CONFIG_1, &reusable_register);
-    dev_data->gyro_fs = (reusable_register & 0x06) >> 1;
+	// read gyro scale factor
+	icm20948_bank_select(dev, 2);
+	uint8_t reusable_register = 0; // register to reuse
+	i2c_reg_read_byte_dt(&cfg->i2c, GYRO_CONFIG_1, &reusable_register);
+	dev_data->gyro_fs = (reusable_register & 0x06) >> 1;
 
-    i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG_2, &reusable_register);
-    dev_data->accel_sensitivity_shift = (reusable_register & 0x06) >> 1;
+	i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG_2, &reusable_register);
+	dev_data->accel_sensitivity_shift = (reusable_register & 0x06) >> 1;
 
-    icm20948_reset(dev);
+	icm20948_reset(dev);
 
-    icm20948_wake_up(dev);
+	k_sleep(K_MSEC(120)); // wait for reset ramp up
 
-    icm20948_accel_config(dev);
+	icm20948_wake_up(dev);
 
-    return 0;
+	icm20948_accel_config(dev);
+
+	return 0;
 }
 
 #define ICM2048_DEFINE(inst)                                                                       \
-    static struct icm20948_data icm20948_data_##inst;                                          \
+	static struct icm20948_data icm20948_data_##inst;                                          \
                                                                                                    \
-    static const struct icm20948_config icm20948_config##inst = {                              \
-        .i2c = I2C_DT_SPEC_INST_GET(inst)};                                                \
+	static const struct icm20948_config icm20948_config##inst = {                              \
+		.i2c = I2C_DT_SPEC_INST_GET(inst)};                                                \
                                                                                                    \
-    SENSOR_DEVICE_DT_INST_DEFINE(inst, icm20948_init, NULL, &icm20948_data_##inst,             \
-                     &icm20948_config##inst, POST_KERNEL,                          \
-                     CONFIG_SENSOR_INIT_PRIORITY, &icm20948_driver_api);
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, icm20948_init, NULL, &icm20948_data_##inst,             \
+				     &icm20948_config##inst, POST_KERNEL,                          \
+				     CONFIG_SENSOR_INIT_PRIORITY, &icm20948_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ICM2048_DEFINE)
