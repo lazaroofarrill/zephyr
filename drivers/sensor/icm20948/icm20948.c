@@ -95,10 +95,28 @@
 #define ACCEL_CONFIG    0x14
 #define ACCEL_CONFIG_2  0x15
 
+// User bank 3
+#define I2C_MST_CTRL       0x01
+#define I2C_MST_DELAY_CTRL 0x02
+#define I2C_SLV0_ADDR      0x03
+#define I2C_SLV0_REG       0x04
+#define I2C_SLV0_CTRL      0x05
+#define I2C_SLV0_DO        0x06
+
 // Common
 #define FIFO_EN_1 0x66
 
 #define REG_BANK_SEL 0x7F
+
+// AK09916
+#define AK09916_HXL   0x11
+#define AK09916_HXH   0x12
+#define AK09916_HYL   0x13
+#define AK09916_HYH   0x14
+#define AK09916_HZL   0x15
+#define AK09916_HZH   0x16
+#define AK09916_ST2   0x18
+#define AK09916_CNTL2 0x31
 
 #define ROOM_TEMP_OFFSET_DEG 21
 #define TEMP_SENSITIVITY     333.87
@@ -650,7 +668,7 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 static const struct sensor_driver_api icm20948_driver_api = {.sample_fetch = icm20948_sample_fetch,
 							     .channel_get = icm20948_channel_get};
 
-int icm20948_wake_up(const struct device *dev)
+static int icm20948_wake_up(const struct device *dev)
 {
 	icm20948_bank_select(dev, 0);
 
@@ -665,7 +683,7 @@ int icm20948_wake_up(const struct device *dev)
 	return 0;
 }
 
-int icm20948_reset(const struct device *dev)
+static int icm20948_reset(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
 
@@ -716,7 +734,7 @@ static int icm20948_gyro_config(const struct device *dev)
 	return err;
 }
 
-int icm20948_accel_config(const struct device *dev)
+static int icm20948_accel_config(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
 	int err;
@@ -740,6 +758,81 @@ int icm20948_accel_config(const struct device *dev)
 	}
 
 	return err;
+}
+
+typedef enum {
+	AK09916_MODE_PWR_DWN = 0x00,
+	AK09916_MODE_SINGLE = 0x01,
+	AK09916_MODE_CONT_1 = 0x02,
+	AK09916_MODE_CONT_2 = 0x04,
+	AK09916_MODE_CONT_3 = 0x06,
+	AK09916_MODE_CONT_4 = 0x08,
+	AK09916_MODE_SELF_TEST = 0x10,
+} ak09916_mode;
+
+static int icm20948_mag_config(const struct device *dev)
+{
+	const struct icm20948_config *cfg;
+
+	icm20948_bank_select(dev, 3);
+
+	// set I2C_MST_EN
+	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, GENMASK(5, 5), 0xFF);
+	if (err) {
+		LOG_ERR("Error enabling I2C_MASTER.\n");
+		return err;
+	}
+
+	// set I2C_MST_CLK to 400kHz
+	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, GENMASK(3, 0), 7);
+	if (err) {
+		LOG_ERR("Setting I2C_MST clock frequency.\n");
+		return err;
+	}
+
+	// set delay to 0
+	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_DELAY_CTRL, 0x01, 0x01);
+	if (err) {
+		return err;
+	}
+
+	// set slave address to magnetometer address in write mode
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, 0xC0);
+	if (err) {
+		return err;
+	}
+
+	// set write head to mag CNTL2
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_CNTL2);
+	if (err) {
+		return err;
+	}
+
+	// set magnetometer to continous mode 4
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, AK09916_MODE_CONT_4);
+	if (err) {
+		return err;
+	}
+
+	// enable slave 0 in icm20948
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, GENMASK(7, 6) | 0x7);
+	if (err) {
+		return err;
+	}
+
+	// set slave address to magnetometer address in read mode
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, GENMASK(7, 7) | 0xC0);
+	if (err) {
+		return err;
+	}
+
+	// set where to start reading from
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_HXL);
+	if (err) {
+		return err;
+	}
+
+	return 0;
 }
 
 static int icm20948_init(const struct device *dev)
