@@ -4,6 +4,7 @@
  *
  */
 
+#include <math.h>
 #define DT_DRV_COMPAT invensense_icm20948
 
 #include "zephyr/kernel.h"
@@ -541,17 +542,22 @@ static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint
 	return 0;
 }
 
-static int icm20948_convert_mag(struct sensor_value *val, int16_t raw_val)
+static inline void icm20948_mag_gauss(int32_t in, int32_t *out, int32_t *u_out)
 {
+
 	int32_t k_magnetic_flux_sensitivity_x100 = 15;
 
-	int64_t in100_gauss = raw_val * 1000000LL; // 1 GAUSS equals 100 uT
+	int64_t in100_gauss = in * 1000000LL; // 1 GAUSS equals 100 uT
 
-	val->val1 = (int32_t)(in100_gauss / (k_magnetic_flux_sensitivity_x100 * 1000000LL));
+	*out = (int32_t)(in100_gauss / (k_magnetic_flux_sensitivity_x100 * 1000000LL));
 
-	val->val2 = (int32_t)(in100_gauss -
-			      (val->val1 * k_magnetic_flux_sensitivity_x100 * 1000000LL)) /
-		    k_magnetic_flux_sensitivity_x100;
+	*u_out = (int32_t)(in100_gauss - (*out * k_magnetic_flux_sensitivity_x100 * 1000000LL)) /
+		 k_magnetic_flux_sensitivity_x100;
+};
+
+static int icm20948_convert_mag(struct sensor_value *val, int16_t raw_val)
+{
+	icm20948_mag_gauss((int32_t)raw_val, &val->val1, &val->val2);
 
 	return 0;
 }
