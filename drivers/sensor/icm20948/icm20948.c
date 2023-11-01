@@ -858,6 +858,8 @@ static int icm20948_init(const struct device *dev)
 
 	icm20948_gyro_config(dev);
 
+	icm20948_mag_config(dev);
+
 	return 0;
 }
 
