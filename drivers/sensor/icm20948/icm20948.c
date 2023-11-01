@@ -121,7 +121,6 @@
 #define TEMP_SENSITIVITY_X100 33387
 #define SENS_READ_BUFF_LEN    21
 
-#define ICM20948_READ_BUF_SIZE 120
 LOG_MODULE_REGISTER(ICM20948, CONFIG_SENSOR_LOG_LEVEL);
 
 static int icm20948_bank_select(const struct device *dev, uint8_t bank)
