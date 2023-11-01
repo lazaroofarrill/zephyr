@@ -25,6 +25,7 @@ struct icm20948_config {
 	uint16_t gyro_fs;
 };
 
+// TODO migrate to Kconfig
 typedef enum {
 	ACCEL_DLPFCFG_0 = 0 << 3,
 	ACCEL_DLPFCFG_1 = 1 << 3,
@@ -48,6 +49,7 @@ typedef enum {
 	ACCEL_FCHOICE_ENABLE
 } accel_fchoice;
 
+// TODO migrate to Kconfig
 typedef enum {
 	GYRO_FS_250 = 0 << 1,
 	GYRO_FS_500 = 1 << 1,
@@ -55,6 +57,7 @@ typedef enum {
 	GYRO_FS_2000 = 3 << 1,
 } gyro_fs_sel;
 
+// TODO migrate to Kconfig
 typedef enum {
 	GYRO_DLPFCFG_0 = 0 << 3,
 	GYRO_DLPFCFG_1 = 1 << 3,
