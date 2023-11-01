@@ -118,9 +118,9 @@
 #define AK09916_ST2   0x18
 #define AK09916_CNTL2 0x31
 
-#define ROOM_TEMP_OFFSET_DEG 21
-#define TEMP_SENSITIVITY     333.87
-#define SENS_READ_BUFF_LEN   16
+#define ROOM_TEMP_OFFSET_DEG  21
+#define TEMP_SENSITIVITY_X100 33387
+#define SENS_READ_BUFF_LEN    16
 
 //// declarations
 // static int selectBank(uint8_t bank);
@@ -462,16 +462,15 @@ static int icm20948_bank_select(const struct device *dev, uint8_t bank)
 
 static inline void icm20948_temp_c(int32_t in, int32_t *out_c, uint32_t *out_uc)
 {
-	int64_t sensitivity = 33387; /* value equivalent for x100 1c */
-
 	/* Offset by 21 degrees Celsius */
-	int64_t in100 = (in * 100) + (ROOM_TEMP_OFFSET_DEG * sensitivity);
+	int64_t in100 = (in * 100) + (ROOM_TEMP_OFFSET_DEG * TEMP_SENSITIVITY_X100);
 
 	/* Whole celsius */
-	*out_c = in100 / sensitivity;
+	*out_c = in100 / TEMP_SENSITIVITY_X100;
 
 	/* Micro celsius */
-	*out_uc = ((in100 - (*out_c) * sensitivity) * INT64_C(1000000)) / sensitivity;
+	*out_uc = ((in100 - (*out_c) * TEMP_SENSITIVITY_X100) * INT64_C(1000000)) /
+		  TEMP_SENSITIVITY_X100;
 }
 
 static void icm20948_convert_temp(struct sensor_value *val, int16_t raw_val)
