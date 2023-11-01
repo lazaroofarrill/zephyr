@@ -120,7 +120,7 @@
 
 #define ROOM_TEMP_OFFSET_DEG  21
 #define TEMP_SENSITIVITY_X100 33387
-#define SENS_READ_BUFF_LEN    16
+#define SENS_READ_BUFF_LEN    21
 
 //// declarations
 // static int selectBank(uint8_t bank);
@@ -653,6 +653,13 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 	drv_data->gyro_y = (int16_t)(read_buff[8] << 8 | read_buff[9]);
 	drv_data->gyro_z = (int16_t)(read_buff[10] << 8 | read_buff[11]);
 	drv_data->temp = (int16_t)(read_buff[12] << 8 | read_buff[13]);
+
+	// check for mag overflow in AK09916_ST2
+	if (!((GENMASK(3, 3) & read_buff[20]) >> 3)) {
+		drv_data->magn_x = (int16_t)(read_buff[14] << 8 | read_buff[15]);
+		drv_data->magn_x = (int16_t)(read_buff[16] << 8 | read_buff[17]);
+		drv_data->magn_x = (int16_t)(read_buff[18] << 8 | read_buff[19]);
+	}
 
 	// read accel config
 	uint8_t reg;
