@@ -545,7 +545,7 @@ static int icm20948_convert_mag(struct sensor_value *val, int16_t raw_val)
 {
 	int32_t k_magnetic_flux_sensitivity_x100 = 15;
 
-	int64_t in100_gauss = raw_val; // 1 GAUSS equals 100 uT
+	int64_t in100_gauss = raw_val * 1000000LL; // 1 GAUSS equals 100 uT
 
 	val->val1 = (int32_t)(in100_gauss / (k_magnetic_flux_sensitivity_x100 * 1000000LL));
 
