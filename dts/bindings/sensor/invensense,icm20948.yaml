@@ -82,14 +82,10 @@ properties:
     description: |
       Default full scale of gyroscope. (Unit - DPS)
       Maps to GYRO_FS_SEL field in GYRO_CONFIG0 setting
-      Power-on reset value is 2000
-    default: 2000
+      Power-on reset value is 250
+    default: 250
     enum:
-      - 2000
-      - 1000
-      - 500
       - 250
-      - 125
-      - 63
-      - 31
-      - 16
+      - 500
+      - 1000
+      - 2000

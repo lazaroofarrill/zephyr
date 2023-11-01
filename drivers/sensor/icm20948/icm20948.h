@@ -22,7 +22,7 @@ struct icm20948_data {
 struct icm20948_config {
 	struct i2c_dt_spec i2c;
 	uint8_t accel_fs;
-	uint16_t gyro_fs;
+	uint8_t gyro_fs;
 };
 
 // TODO migrate to Kconfig
@@ -51,10 +51,10 @@ typedef enum {
 
 // TODO migrate to Kconfig
 typedef enum {
-	GYRO_FS_250 = 0 << 1,
-	GYRO_FS_500 = 1 << 1,
-	GYRO_FS_1000 = 2 << 1,
-	GYRO_FS_2000 = 3 << 1,
+	GYRO_FS_250 = 0,
+	GYRO_FS_500 = 1,
+	GYRO_FS_1000 = 2,
+	GYRO_FS_2000 = 3,
 } gyro_fs_sel;
 
 // TODO migrate to Kconfig

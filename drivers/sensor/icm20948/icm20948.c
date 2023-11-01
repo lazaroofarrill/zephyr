@@ -4,6 +4,7 @@
  *
  */
 
+#include "zephyr/sys/printk.h"
 #include <math.h>
 #define DT_DRV_COMPAT invensense_icm20948
 
@@ -159,6 +160,18 @@ static void icm20948_convert_temp(struct sensor_value *val, int16_t raw_val)
 	icm20948_temp_c((int32_t)raw_val, &val->val1, &val->val2);
 }
 
+static inline void icm20948_accel_mss(int64_t sensitivity, int32_t in, int32_t *out, int32_t *u_out)
+{
+	/* Convert to micrometers/s^2 */
+	int64_t in_ms = in * SENSOR_G;
+
+	/* meters/s^2 whole values */
+	*out = in_ms / (sensitivity * 1000000LL);
+
+	/* micrometers/s^2 */
+	*u_out = (in_ms - (*out * sensitivity * 1000000LL)) / sensitivity;
+};
+
 static void icm20948_convert_accel(const struct icm20948_config *cfg, int32_t raw_accel_value,
 				   struct sensor_value *output_value)
 {
@@ -179,14 +192,7 @@ static void icm20948_convert_accel(const struct icm20948_config *cfg, int32_t ra
 		break;
 	}
 
-	/* Convert to micrometers/s^2 */
-	int64_t in_ms = raw_accel_value * SENSOR_G;
-
-	/* meters/s^2 whole values */
-	output_value->val1 = in_ms / (sensitivity * 1000000LL);
-
-	/* micrometers/s^2 */
-	output_value->val2 = (in_ms - (output_value->val1 * sensitivity * 1000000LL)) / sensitivity;
+	icm20948_accel_mss(sensitivity, raw_accel_value, &output_value->val1, &output_value->val2);
 }
 
 static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint8_t gyro_fs)
@@ -350,12 +356,11 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 		drv_data->mag_x = (int16_t)(read_buff[18] << 8 | read_buff[19]);
 	}
 
-	// read accel config
-	uint8_t reg;
-	err = i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG, &reg);
-	if (err) {
-		return err;
+	printk("fetched values: ");
+	for (int i = 0; i < SENS_READ_BUFF_LEN; i++) {
+		printk("%6d", read_buff[i]);
 	}
+	printk("\n\n");
 
 	return 0;
 }
@@ -398,61 +403,39 @@ static int icm20948_reset(const struct device *dev)
 static int icm20948_gyro_config(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
-	int err;
 
-	err = icm20948_bank_select(dev, 2);
+	int err = icm20948_bank_select(dev, 2);
 	if (err) {
 		return err;
 	}
 
-	uint8_t gyro_config_reg_1;
-
-	err = i2c_reg_read_byte_dt(&cfg->i2c, GYRO_CONFIG_1, &gyro_config_reg_1);
+	err = i2c_reg_update_byte_dt(&cfg->i2c, GYRO_CONFIG_1, GENMASK(5, 0),
+				     GYRO_DLPFCFG_0 | cfg->gyro_fs << 1 | GYRO_F_ENABLE);
 	if (err) {
 		return err;
 	}
 
-	gyro_config_reg_1 = gyro_config_reg_1 & GENMASK(7, 6);
-	if (err) {
-		return err;
-	}
-
-	gyro_config_reg_1 = gyro_config_reg_1 | GYRO_DLPFCFG_0 | GYRO_FS_250 | GYRO_F_ENABLE;
-
-	err = i2c_reg_write_byte_dt(&cfg->i2c, GYRO_CONFIG_1, gyro_config_reg_1);
-	if (err) {
-		return err;
-	}
-
-	LOG_INF("Gyro Config: %d\n", gyro_config_reg_1);
-
-	return err;
+	return 0;
 }
 
 static int icm20948_accel_config(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
-	int err;
 
 	uint8_t accel_config_reg;
 
-	err = i2c_reg_read_byte_dt(&cfg->i2c, ACCEL_CONFIG, &accel_config_reg);
+	int err = icm20948_bank_select(dev, 2);
 	if (err) {
 		return err;
 	}
 
-	accel_config_reg = accel_config_reg & GENMASK(7, 6);
-
-	accel_config_reg =
-		accel_config_reg | ACCEL_DLPFCFG_0 | (cfg->accel_fs << 1) |
-		ACCEL_FCHOICE_ENABLE; // TODO make this variable configurable in the sensor
-
-	err = i2c_reg_write_byte_dt(&cfg->i2c, ACCEL_CONFIG, accel_config_reg);
+	err = i2c_reg_update_byte_dt(&cfg->i2c, ACCEL_CONFIG, GENMASK(5, 0),
+				     ACCEL_DLPFCFG_0 | (cfg->accel_fs << 1) | ACCEL_FCHOICE_ENABLE);
 	if (err) {
 		return err;
 	}
 
-	return err;
+	return 0;
 }
 
 typedef enum {
@@ -548,6 +531,9 @@ static int icm20948_init(const struct device *dev)
 	icm20948_gyro_config(dev);
 
 	icm20948_mag_config(dev);
+
+	printk("accel_fs: %d\n", cfg->accel_fs);
+	printk("gyro_fs: %d\n\n", cfg->gyro_fs);
 
 	return 0;
 }
