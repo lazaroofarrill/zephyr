@@ -541,7 +541,7 @@ static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint
 	return 0;
 }
 
-static int icm20948_convert_mgn(struct sensor_value *val, int16_t raw_val)
+static int icm20948_convert_mag(struct sensor_value *val, int16_t raw_val)
 {
 	int32_t k_magnetic_flux_sensitivity_x100 = 15;
 
@@ -595,18 +595,18 @@ static int icm20948_channel_get(const struct device *dev, enum sensor_channel ch
 		icm20948_convert_gyro(val, dev_data->gyro_z, cfg->gyro_fs);
 		break;
 	case SENSOR_CHAN_MAGN_XYZ:
-		icm20948_convert_mgn(val, dev_data->mag_x);
-		icm20948_convert_mgn(val + 1, dev_data->mag_y);
-		icm20948_convert_mgn(val + 2, dev_data->mag_z);
+		icm20948_convert_mag(val, dev_data->mag_x);
+		icm20948_convert_mag(val + 1, dev_data->mag_y);
+		icm20948_convert_mag(val + 2, dev_data->mag_z);
 		break;
 	case SENSOR_CHAN_MAGN_X:
-		icm20948_convert_mgn(val, dev_data->mag_x);
+		icm20948_convert_mag(val, dev_data->mag_x);
 		break;
 	case SENSOR_CHAN_MAGN_Y:
-		icm20948_convert_mgn(val, dev_data->mag_y);
+		icm20948_convert_mag(val, dev_data->mag_y);
 		break;
 	case SENSOR_CHAN_MAGN_Z:
-		icm20948_convert_mgn(val, dev_data->mag_z);
+		icm20948_convert_mag(val, dev_data->mag_z);
 		break;
 	default:
 		return -ENOTSUP;
