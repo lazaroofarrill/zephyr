@@ -510,20 +510,20 @@ static void icm20948_convert_accel(const struct icm20948_config *cfg, int32_t ra
 
 static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint8_t gyro_fs)
 {
-	int64_t sensitivity = 0; /* value equivalent for 10x gyro reading deg/s */
+	int64_t gyro_sensitivity_10x = 0; /* value equivalent for 10x gyro reading deg/s */
 
 	switch (gyro_fs) {
 	case GYRO_FS_250:
-		sensitivity = 1310;
+		gyro_sensitivity_10x = 1310;
 		break;
 	case GYRO_FS_500:
-		sensitivity = 655;
+		gyro_sensitivity_10x = 655;
 		break;
 	case GYRO_FS_1000:
-		sensitivity = 328;
+		gyro_sensitivity_10x = 328;
 		break;
 	case GYRO_FS_2000:
-		sensitivity = 164;
+		gyro_sensitivity_10x = 164;
 		break;
 	default:
 		return -EINVAL;
@@ -532,23 +532,26 @@ static int icm20948_convert_gyro(struct sensor_value *val, int16_t raw_val, uint
 	int64_t in10_rads = (int64_t)raw_val * SENSOR_PI * 10LL;
 
 	/* Whole rad/s */
-	val->val1 = (int32_t)(in10_rads / (sensitivity * 180LL * 1000000LL));
+	val->val1 = (int32_t)(in10_rads / (gyro_sensitivity_10x * 180LL * 1000000LL));
 
 	/* microrad/s */
-	val->val2 = (int32_t)((in10_rads - (val->val1 * sensitivity * 180LL * 1000000LL)) /
-			      (sensitivity * 180LL));
+	val->val2 = (int32_t)((in10_rads - (val->val1 * gyro_sensitivity_10x * 180LL * 1000000LL)) /
+			      (gyro_sensitivity_10x * 180LL));
 
 	return 0;
 }
 
 static int icm20948_convert_mgn(struct sensor_value *val, int16_t raw_val)
 {
-	const double k_magnetic_flux_density = 4912.0;
-	double flux_value = raw_val * k_magnetic_flux_density / INT16_MAX;
-	int res = sensor_value_from_double(val, flux_value);
-	if (res) {
-		return res;
-	}
+	int32_t k_magnetic_flux_sensitivity_x100 = 15;
+
+	int64_t in100_gauss = raw_val; // 1 GAUSS equals 100 uT
+
+	val->val1 = (int32_t)(in100_gauss / (k_magnetic_flux_sensitivity_x100 * 1000000LL));
+
+	val->val2 = (int32_t)(in100_gauss -
+			      (val->val1 * k_magnetic_flux_sensitivity_x100 * 1000000LL)) /
+		    k_magnetic_flux_sensitivity_x100;
 
 	return 0;
 }
@@ -592,18 +595,18 @@ static int icm20948_channel_get(const struct device *dev, enum sensor_channel ch
 		icm20948_convert_gyro(val, dev_data->gyro_z, cfg->gyro_fs);
 		break;
 	case SENSOR_CHAN_MAGN_XYZ:
-		icm20948_convert_mgn(val, dev_data->magn_x);
-		icm20948_convert_mgn(val + 1, dev_data->magn_y);
-		icm20948_convert_mgn(val + 2, dev_data->magn_z);
+		icm20948_convert_mgn(val, dev_data->mag_x);
+		icm20948_convert_mgn(val + 1, dev_data->mag_y);
+		icm20948_convert_mgn(val + 2, dev_data->mag_z);
 		break;
 	case SENSOR_CHAN_MAGN_X:
-		icm20948_convert_mgn(val, dev_data->magn_x);
+		icm20948_convert_mgn(val, dev_data->mag_x);
 		break;
 	case SENSOR_CHAN_MAGN_Y:
-		icm20948_convert_mgn(val, dev_data->magn_y);
+		icm20948_convert_mgn(val, dev_data->mag_y);
 		break;
 	case SENSOR_CHAN_MAGN_Z:
-		icm20948_convert_mgn(val, dev_data->magn_z);
+		icm20948_convert_mgn(val, dev_data->mag_z);
 		break;
 	default:
 		return -ENOTSUP;
@@ -656,9 +659,9 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 
 	// check for mag overflow in AK09916_ST2
 	if (!((GENMASK(3, 3) & read_buff[20]) >> 3)) {
-		drv_data->magn_x = (int16_t)(read_buff[14] << 8 | read_buff[15]);
-		drv_data->magn_x = (int16_t)(read_buff[16] << 8 | read_buff[17]);
-		drv_data->magn_x = (int16_t)(read_buff[18] << 8 | read_buff[19]);
+		drv_data->mag_x = (int16_t)(read_buff[14] << 8 | read_buff[15]);
+		drv_data->mag_x = (int16_t)(read_buff[16] << 8 | read_buff[17]);
+		drv_data->mag_x = (int16_t)(read_buff[18] << 8 | read_buff[19]);
 	}
 
 	// read accel config
@@ -778,7 +781,7 @@ typedef enum {
 
 static int icm20948_mag_config(const struct device *dev)
 {
-	const struct icm20948_config *cfg;
+	const struct icm20948_config *cfg = dev->config;
 
 	icm20948_bank_select(dev, 3);
 

@@ -14,9 +14,9 @@ struct icm20948_data {
 	int16_t gyro_y;
 	int16_t gyro_z;
 
-	int16_t magn_x;
-	int16_t magn_y;
-	int16_t magn_z;
+	int16_t mag_x;
+	int16_t mag_y;
+	int16_t mag_z;
 };
 
 struct icm20948_config {
