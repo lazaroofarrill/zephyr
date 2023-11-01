@@ -96,6 +96,7 @@
 #define ACCEL_CONFIG_2  0x15
 
 // User bank 3
+#define I2C_MST_ODR_CONFIG 0x00
 #define I2C_MST_CTRL       0x01
 #define I2C_MST_DELAY_CTRL 0x02
 #define I2C_SLV0_ADDR      0x03
@@ -109,14 +110,16 @@
 #define REG_BANK_SEL 0x7F
 
 // AK09916
-#define AK09916_HXL   0x11
-#define AK09916_HXH   0x12
-#define AK09916_HYL   0x13
-#define AK09916_HYH   0x14
-#define AK09916_HZL   0x15
-#define AK09916_HZH   0x16
-#define AK09916_ST2   0x18
-#define AK09916_CNTL2 0x31
+#define AK09916_WIA      0x01
+#define AK09916_I2C_ADDR 0x0C
+#define AK09916_HXL      0x11
+#define AK09916_HXH      0x12
+#define AK09916_HYL      0x13
+#define AK09916_HYH      0x14
+#define AK09916_HZL      0x15
+#define AK09916_HZH      0x16
+#define AK09916_ST2      0x18
+#define AK09916_CNTL2    0x31
 
 #define ROOM_TEMP_OFFSET_DEG  21
 #define TEMP_SENSITIVITY_X100 33387
@@ -422,8 +425,6 @@ static int icm20948_accel_config(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
 
-	uint8_t accel_config_reg;
-
 	int err = icm20948_bank_select(dev, 2);
 	if (err) {
 		return err;
@@ -433,6 +434,27 @@ static int icm20948_accel_config(const struct device *dev)
 				     ACCEL_DLPFCFG_0 | (cfg->accel_fs << 1) | ACCEL_FCHOICE_ENABLE);
 	if (err) {
 		return err;
+	}
+
+	return 0;
+}
+
+/*@brief Control I2C_MST_BYPASS
+ */
+static int icm20948_bypass(const struct device *dev, bool enable)
+{
+	const struct icm20948_config *cfg = dev->config;
+	icm20948_bank_select(dev, 0);
+
+	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, GENMASK(5, 5), (!enable) << 5);
+	if (err) {
+		LOG_ERR("Error enabling I2C_MASTER.\n");
+		return err;
+	}
+
+	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, GENMASK(1, 1), enable << 1);
+	if (ret) {
+		return ret;
 	}
 
 	return 0;
@@ -452,45 +474,77 @@ static int icm20948_mag_config(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
 
-	icm20948_bank_select(dev, 3);
-
-	// set I2C_MST_EN
-	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, GENMASK(5, 5), 0xFF);
-	if (err) {
-		LOG_ERR("Error enabling I2C_MASTER.\n");
-		return err;
-	}
-
-	// set I2C_MST_CLK to 400kHz
-	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, GENMASK(3, 0), 7);
-	if (err) {
-		LOG_ERR("Setting I2C_MST clock frequency.\n");
-		return err;
-	}
-
-	// set delay to 0
-	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_DELAY_CTRL, 0x01, 0x01);
+	int err = icm20948_bypass(dev, true);
 	if (err) {
 		return err;
 	}
 
-	// set slave address to magnetometer address in write mode
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, 0xC0);
+	uint8_t device_id = 0;
+
+	struct i2c_dt_spec ak099dt_spec = {.bus = cfg->i2c.bus, .addr = AK09916_I2C_ADDR};
+
+	err = i2c_reg_read_byte_dt(&ak099dt_spec, AK09916_WIA, &device_id);
 	if (err) {
 		return err;
 	}
 
-	// set write head to mag CNTL2
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_CNTL2);
+	if (device_id != 0x09) {
+		LOG_ERR("can't communicate with AK09916.\tDevice Id: %d", device_id);
+		return -ENODEV;
+	}
+
+	// set magnetometer in continuous mode 4
+	err = i2c_reg_write_byte_dt(&ak099dt_spec, AK09916_CNTL2, 0x08);
 	if (err) {
 		return err;
 	}
 
-	// set magnetometer to continous mode 4
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, AK09916_MODE_CONT_4);
+	k_sleep(K_MSEC(1));
+	uint8_t mag_buff[7];
+
+	err = i2c_burst_read_dt(&ak099dt_spec, AK09916_HXL, mag_buff, 7);
 	if (err) {
 		return err;
 	}
+
+	for (int i = 0; i < 7; i++) {
+		LOG_INF("%d\t", mag_buff[i]);
+	}
+
+	//	err = icm20948_bank_select(dev, 3);
+	//	if (err) {
+	//		return err;
+	//	}
+	//
+	//	// set I2C_MST_CLK to 400kHz
+	//	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, GENMASK(4, 0), (1 << 4) |
+	// 0x07); 	if (err) { 		return err;
+	//	}
+	//
+	//	// enable delay ODR
+	//	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_DELAY_CTRL, 0x01, 0xFF);
+	//	if (err) {
+	//		return err;
+	//	}
+	//
+	//	// set slave address to magnetometer address in write mode
+	//	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR);
+	//	if (err) {
+	//		return err;
+	//	}
+	//
+	//	// set write head to mag CNTL2
+	//	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_CNTL2);
+	//	if (err) {
+	//		return err;
+	//	}
+	//
+	//	// set magnetometer to continous mode 4
+	//	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, AK09916_MODE_CONT_4);
+	//	if (err) {
+	//		return err;
+	//	}
+	//
 
 	// enable slave 0 in icm20948
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, GENMASK(7, 6) | 0x7);
@@ -499,7 +553,7 @@ static int icm20948_mag_config(const struct device *dev)
 	}
 
 	// set slave address to magnetometer address in read mode
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, GENMASK(7, 7) | 0xC0);
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, (1 << 7) | AK09916_I2C_ADDR);
 	if (err) {
 		return err;
 	}
@@ -531,9 +585,6 @@ static int icm20948_init(const struct device *dev)
 	icm20948_gyro_config(dev);
 
 	icm20948_mag_config(dev);
-
-	printk("accel_fs: %d\n", cfg->accel_fs);
-	printk("gyro_fs: %d\n\n", cfg->gyro_fs);
 
 	return 0;
 }
