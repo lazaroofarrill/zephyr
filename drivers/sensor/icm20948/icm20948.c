@@ -367,18 +367,10 @@ typedef enum {
 	AK09916_MODE_SELF_TEST = 0x10,
 } ak09916_mode;
 
-static int icm20948_mag_config(const struct device *dev)
+static int icm20948_mag_config_clk(const struct device *dev)
 {
 	const struct icm20948_config *cfg = dev->config;
-
-	int err = icm20948_bypass(dev, false);
-	if (err) {
-		return err;
-	}
-
-	uint8_t device_id = 0;
-
-	err = icm20948_bank_select(dev, 3);
+	int err = icm20948_bank_select(dev, 3);
 	if (err) {
 		return err;
 	}
@@ -390,48 +382,53 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	// // reading device id to test connection
-	// err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, BIT(7) | AK09916_I2C_ADDR);
-	// if (err) {
-	// 	LOG_ERR("Couldn't set read address for AK09916");
-	// 	return err;
-	// }
+	return 0;
+}
 
-	//  set register to read device id
-	//	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_WIA);
-	//	if (err) {
-	//		LOG_ERR("Couldn't set register to read in AK09916");
-	//		return err;
-	//	}
-	//
-	//	// set control to read
-	//	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, BIT(7) | 1);
-	//	if (err) {
-	//		LOG_ERR("Error configuring slave 0 for reading control read.");
-	//		return err;
-	//	}
-	//
-	//	k_sleep(K_USEC(2000));
-	//
-	//	err = icm20948_bank_select(dev, 0);
-	//	if (err) {
-	//		return err;
-	//	}
-	//
-	//	err = i2c_burst_read_dt(&cfg->i2c, EXT_SLV_SENS_DATA_00, &device_id, 1);
-	//	if (err) {
-	//		LOG_ERR("Error getting mag id");
-	//		return err;
-	//	}
-	//
-	//	if (device_id != AK09916_DEVICE_ID) {
-	//		LOG_ERR("Error stablishing communication with AK09916");
-	//		return -EIO;
-	//	}
-	//
-	//	LOG_INF("Device id is 0x%x", device_id);
+static int icm20948_mag_config_mode(const struct device *dev)
+{
+	const struct icm20948_config *cfg = dev->config;
+	int err = icm20948_bank_select(dev, 3);
+	if (err) {
+		return err;
+	}
 
-	// starting read sequence again
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR);
+	if (err) {
+		return err;
+	}
+
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_CNTL2);
+	if (err) {
+		return err;
+	}
+
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, 0);
+	if (err) {
+		LOG_ERR("Could not configure sensor to read mag data");
+		return err;
+	}
+
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, 0x08);
+	if (err) {
+		return err;
+	}
+
+	k_sleep(K_USEC(100));
+
+	return 0;
+}
+
+static int icm20948_mag_config_reads(const struct device *dev)
+{
+
+	const struct icm20948_config *cfg = dev->config;
+
+	int err = icm20948_bank_select(dev, 3);
+	if (err) {
+		return err;
+	}
+
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, BIT(7) | AK09916_I2C_ADDR);
 	if (err) {
 		LOG_ERR("Couldn't set read address for AK09916");
@@ -450,24 +447,33 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	k_sleep(K_MSEC(1));
+	return 0;
+}
 
-	icm20948_bank_select(dev, 0);
+static int icm20948_mag_config(const struct device *dev)
+{
 
-	//	uint8_t dregs[9];
-	//
-	//	icm20948_bank_select(dev, 0);
-	//
-	//	err = i2c_burst_read_dt(&cfg->i2c, EXT_SLV_SENS_DATA_00, dregs, 9);
-	//	if (err) {
-	//		LOG_ERR("Error getting mag id");
-	//		return err;
-	//	}
-	//
-	//	for (int i = 0; i < 9; i++) {
-	//		LOG_INF("Data at index %d 0x%x", i, dregs[i]);
-	//	}
-	//
+	int err = icm20948_bypass(dev, false);
+	if (err) {
+		return err;
+	}
+
+	err = icm20948_mag_config_clk(dev);
+	if (err) {
+		return err;
+	}
+
+	err = icm20948_mag_config_mode(dev);
+	if (err) {
+		return err;
+	}
+
+	err = icm20948_mag_config_reads(dev);
+	if (err) {
+		LOG_ERR("Error stablishing reads in the magnetometer");
+		return err;
+	}
+
 	LOG_INF("AK09916 Initialized");
 
 	return 0;
