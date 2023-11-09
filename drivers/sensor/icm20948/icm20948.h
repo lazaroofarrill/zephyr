@@ -117,7 +117,7 @@
 
 #define ROOM_TEMP_OFFSET_DEG  21
 #define TEMP_SENSITIVITY_X100 33387
-#define SENS_READ_BUFF_LEN    20
+#define SENS_READ_BUFF_LEN    22
 
 struct icm20948_data {
 	int16_t accel_x;
@@ -192,5 +192,15 @@ typedef enum {
 	GYRO_F_DISABLE, // Disable low pass filter
 	GYRO_F_ENABLE   // Enable low pass filter
 } gyro_fchoice;
+
+typedef enum {
+	AK09916_MODE_PWR_DWN = 0x00,
+	AK09916_MODE_SINGLE = 0x01,
+	AK09916_MODE_CONT_1 = 0x02,
+	AK09916_MODE_CONT_2 = 0x04,
+	AK09916_MODE_CONT_3 = 0x06,
+	AK09916_MODE_CONT_4 = 0x08,
+	AK09916_MODE_SELF_TEST = 0x10,
+} ak09916_mode;
 
 #endif /* ZEPHYR_DRIVERS_SENSOR_ICM20948_H_ */
