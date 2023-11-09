@@ -4,7 +4,6 @@
  *
  */
 
-#include "zephyr/sys/printk.h"
 #include <math.h>
 #define DT_DRV_COMPAT invensense_icm20948
 
@@ -256,12 +255,6 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 	drv_data->mag_x = (int16_t)(read_buff[15] << 8 | read_buff[14]);
 	drv_data->mag_y = (int16_t)(read_buff[17] << 8 | read_buff[16]);
 	drv_data->mag_z = (int16_t)(read_buff[19] << 8 | read_buff[18]);
-
-	printk("fetched values: ");
-	for (int i = 0; i < SENS_READ_BUFF_LEN; i++) {
-		printk("%6d", read_buff[i]);
-	}
-	printk("\n\n");
 
 	return 0;
 }
