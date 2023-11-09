@@ -117,7 +117,7 @@
 
 #define ROOM_TEMP_OFFSET_DEG  21
 #define TEMP_SENSITIVITY_X100 33387
-#define SENS_READ_BUFF_LEN    23
+#define SENS_READ_BUFF_LEN    20
 
 struct icm20948_data {
 	int16_t accel_x;
