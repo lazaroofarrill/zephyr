@@ -468,7 +468,6 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	// configuring mag to read from hxl to st2
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_HXL);
 	if (err) {
 		return err;
