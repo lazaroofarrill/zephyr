@@ -403,18 +403,18 @@ static int icm20948_mag_config_mode(const struct device *dev)
 		return err;
 	}
 
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, 0x08);
+	if (err) {
+		return err;
+	}
+
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, 0);
 	if (err) {
 		LOG_ERR("Could not configure sensor to read mag data");
 		return err;
 	}
 
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, 0x08);
-	if (err) {
-		return err;
-	}
-
-	k_sleep(K_USEC(100));
+	k_sleep(K_USEC(1000));
 
 	return 0;
 }
@@ -447,6 +447,11 @@ static int icm20948_mag_config_reads(const struct device *dev)
 		return err;
 	}
 
+	err = icm20948_bank_select(dev, 0);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -460,11 +465,13 @@ static int icm20948_mag_config(const struct device *dev)
 
 	err = icm20948_mag_config_clk(dev);
 	if (err) {
+		LOG_ERR("Error setting I2C Master clock speed.");
 		return err;
 	}
 
 	err = icm20948_mag_config_mode(dev);
 	if (err) {
+		LOG_ERR("Error selecting mode for magnetometer.");
 		return err;
 	}
 
