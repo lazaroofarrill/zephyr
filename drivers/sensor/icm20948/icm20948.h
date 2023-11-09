@@ -142,6 +142,7 @@ struct icm20948_config {
 	struct i2c_dt_spec i2c;
 	uint8_t accel_fs;
 	uint8_t gyro_fs;
+	uint8_t mag_freq;
 };
 
 // TODO migrate to Kconfig

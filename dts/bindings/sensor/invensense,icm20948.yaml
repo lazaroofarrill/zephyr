@@ -89,3 +89,15 @@ properties:
       - 500
       - 1000
       - 2000
+
+  mag-freq:
+    type: int
+    description: |
+      Magnetometer frequency. (Unit - Hz)
+      Maps to AK09916 CNTL2 operation mode setting
+    default: 100
+    enum:
+      - 10
+      - 20
+      - 50
+      - 100
