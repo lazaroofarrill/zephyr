@@ -140,6 +140,10 @@
 #define ICM20948_I2C_MST_STS_SLV4_DONE BIT(4)
 #define I2C_READ_FLAG                  BIT(7)
 
+#define MULT_MST_EN   BIT(7)
+#define I2C_MST_P_NSR BIT(4)
+#define I2C_MST_CLK   0x07
+
 LOG_MODULE_REGISTER(ICM20948, CONFIG_SENSOR_LOG_LEVEL);
 
 static int icm20948_bank_select(const struct device *dev, uint8_t bank)
@@ -491,11 +495,16 @@ static int icm20948_i2c_master_enable(const struct device *dev, bool enable)
 		return err;
 	}
 
-	err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), enable << 5);
+	// Enable I2C master or bypess.
+	// Also reset master.
+	// Wait at least 50 nS for reset.
+	err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), enable << 5 | BIT(1));
 	if (err) {
 		LOG_ERR("Error enabling I2C_MASTER.\n");
 		return err;
 	}
+
+	k_sleep(K_USEC(1));
 
 	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, BIT(1), (!enable) << 1);
 	if (ret) {
@@ -504,10 +513,6 @@ static int icm20948_i2c_master_enable(const struct device *dev, bool enable)
 
 	return 0;
 }
-
-#define MULT_MST_EN   BIT(7)
-#define I2C_MST_P_NSR BIT(4)
-#define I2C_MST_CLK   0x07
 
 static int icm20948_mag_config(const struct device *dev)
 {
@@ -574,7 +579,7 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	k_msleep(100);
+	k_sleep(K_USEC(1));
 
 	// config magnetometer to read
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR | I2C_READ_FLAG);
@@ -594,7 +599,7 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	k_msleep(100);
+	k_sleep(K_USEC(1));
 
 	return 0;
 }
