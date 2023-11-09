@@ -336,20 +336,18 @@ static int icm20948_accel_config(const struct device *dev)
 	return 0;
 }
 
-/*@brief Control I2C_MST_BYPASS
- */
-static int icm20948_bypass(const struct device *dev, bool enable)
+static int icm20948_i2c_master_enable(const struct device *dev, bool enable)
 {
 	const struct icm20948_config *cfg = dev->config;
 	icm20948_bank_select(dev, 0);
 
-	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), (!enable) << 5);
+	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), (enable) << 5);
 	if (err) {
 		LOG_ERR("Error enabling I2C_MASTER.\n");
 		return err;
 	}
 
-	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, BIT(1), enable << 1);
+	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, BIT(1), !enable << 1);
 	if (ret) {
 		return ret;
 	}
@@ -357,42 +355,25 @@ static int icm20948_bypass(const struct device *dev, bool enable)
 	return 0;
 }
 
-typedef enum {
-	AK09916_MODE_PWR_DWN = 0x00,
-	AK09916_MODE_SINGLE = 0x01,
-	AK09916_MODE_CONT_1 = 0x02,
-	AK09916_MODE_CONT_2 = 0x04,
-	AK09916_MODE_CONT_3 = 0x06,
-	AK09916_MODE_CONT_4 = 0x08,
-	AK09916_MODE_SELF_TEST = 0x10,
-} ak09916_mode;
-
-static int icm20948_mag_config_clk(const struct device *dev)
+static int icm20948_mag_config(const struct device *dev)
 {
+
 	const struct icm20948_config *cfg = dev->config;
-	int err = icm20948_bank_select(dev, 3);
+
+	int err = icm20948_i2c_master_enable(dev, true);
 	if (err) {
 		return err;
 	}
 
 	// Set I2C master clock frequency
+	err = icm20948_bank_select(dev, 3);
 	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, GENMASK(3, 0), 0x07);
 	if (err) {
 		LOG_ERR("Couldn't set i2c master clock frequency");
 		return err;
 	}
 
-	return 0;
-}
-
-static int icm20948_mag_config_mode(const struct device *dev)
-{
-	const struct icm20948_config *cfg = dev->config;
-	int err = icm20948_bank_select(dev, 3);
-	if (err) {
-		return err;
-	}
-
+	// Config Magnetometer in continuous mode 4
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR);
 	if (err) {
 		return err;
@@ -403,7 +384,7 @@ static int icm20948_mag_config_mode(const struct device *dev)
 		return err;
 	}
 
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, 0x08);
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, AK09916_MODE_CONT_4);
 	if (err) {
 		return err;
 	}
@@ -414,21 +395,7 @@ static int icm20948_mag_config_mode(const struct device *dev)
 		return err;
 	}
 
-	k_sleep(K_USEC(1000));
-
-	return 0;
-}
-
-static int icm20948_mag_config_reads(const struct device *dev)
-{
-
-	const struct icm20948_config *cfg = dev->config;
-
-	int err = icm20948_bank_select(dev, 3);
-	if (err) {
-		return err;
-	}
-
+	// config magnetometer to read
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, BIT(7) | AK09916_I2C_ADDR);
 	if (err) {
 		LOG_ERR("Couldn't set read address for AK09916");
@@ -444,40 +411,6 @@ static int icm20948_mag_config_reads(const struct device *dev)
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, BIT(7) | 9);
 	if (err) {
 		LOG_ERR("Could not configure sensor to read mag data");
-		return err;
-	}
-
-	err = icm20948_bank_select(dev, 0);
-	if (err) {
-		return err;
-	}
-
-	return 0;
-}
-
-static int icm20948_mag_config(const struct device *dev)
-{
-
-	int err = icm20948_bypass(dev, false);
-	if (err) {
-		return err;
-	}
-
-	err = icm20948_mag_config_clk(dev);
-	if (err) {
-		LOG_ERR("Error setting I2C Master clock speed.");
-		return err;
-	}
-
-	err = icm20948_mag_config_mode(dev);
-	if (err) {
-		LOG_ERR("Error selecting mode for magnetometer.");
-		return err;
-	}
-
-	err = icm20948_mag_config_reads(dev);
-	if (err) {
-		LOG_ERR("Error stablishing reads in the magnetometer");
 		return err;
 	}
 
@@ -504,6 +437,8 @@ static int icm20948_init(const struct device *dev)
 	icm20948_gyro_config(dev);
 
 	icm20948_mag_config(dev);
+
+	LOG_INF("Device %s initialized", dev->name);
 
 	return 0;
 }
