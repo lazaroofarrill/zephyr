@@ -202,5 +202,4 @@ typedef enum {
 	AK09916_MODE_CONT_4 = 0x08,
 	AK09916_MODE_SELF_TEST = 0x10,
 } ak09916_mode;
-
 #endif /* ZEPHYR_DRIVERS_SENSOR_ICM20948_H_ */
