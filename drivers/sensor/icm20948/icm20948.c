@@ -415,6 +415,7 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
+	// set clock frequency to recommended 400kHz
 	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, BIT(7) | GENMASK(4, 0),
 				     MULT_MST_EN | I2C_MST_P_NSR | I2C_MST_CLK);
 	if (err) {
@@ -461,15 +462,9 @@ static int icm20948_mag_config(const struct device *dev)
 	k_msleep(100);
 
 	// config magnetometer to read
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, BIT(7) | AK09916_I2C_ADDR);
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR | I2C_READ_FLAG);
 	if (err) {
 		LOG_ERR("Couldn't set read address for AK09916");
-		return err;
-	}
-
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, BIT(7) | 9);
-	if (err) {
-		LOG_ERR("Could not configure sensor to read mag data");
 		return err;
 	}
 
@@ -479,9 +474,13 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	k_msleep(100);
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, BIT(7) | 9);
+	if (err) {
+		LOG_ERR("Could not configure sensor to read mag data");
+		return err;
+	}
 
-	LOG_INF("AK09916 configured");
+	k_msleep(100);
 
 	return 0;
 }
