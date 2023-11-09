@@ -253,12 +253,9 @@ static int icm20948_sample_fetch(const struct device *dev, enum sensor_channel c
 	drv_data->gyro_z = (int16_t)(read_buff[10] << 8 | read_buff[11]);
 	drv_data->temp = (int16_t)(read_buff[12] << 8 | read_buff[13]);
 
-	// check for mag overflow in AK09916_ST2
-	//	if (!((BIT(3) & read_buff[20]) >> 3)) {
 	drv_data->mag_x = (int16_t)(read_buff[15] << 8 | read_buff[14]);
 	drv_data->mag_y = (int16_t)(read_buff[17] << 8 | read_buff[16]);
 	drv_data->mag_z = (int16_t)(read_buff[19] << 8 | read_buff[18]);
-	//	}
 
 	printk("fetched values: ");
 	for (int i = 0; i < SENS_READ_BUFF_LEN; i++) {
@@ -340,7 +337,7 @@ static int icm20948_accel_config(const struct device *dev)
 	return 0;
 }
 
-static int icm20948_execute_rw(const struct device *dev, uint8_t reg, bool write)
+static int icm20948_mst_rw(const struct device *dev, uint8_t reg, bool write)
 {
 	/* Instruct the ICM20948 to access over its external i2c bus
 	 * given device register with given details
@@ -374,15 +371,6 @@ static int icm20948_execute_rw(const struct device *dev, uint8_t reg, bool write
 		LOG_ERR("Failed to initiate i2c slave transfer.");
 		return ret;
 	}
-
-	// 	/* Wait for a transfer to be ready */
-	// 	do {
-	// 		ret = i2c_reg_read_byte_dt(&cfg->i2c, I2C_MST_STATUS, &status);
-	// 		if (ret < 0) {
-	// 			LOG_ERR("Waiting for slave failed.");
-	// 			return ret;
-	// 		}
-	// 	} while (!(status & ICM20948_I2C_MST_STS_SLV4_DONE));
 
 	return 0;
 }
@@ -448,14 +436,31 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
+	ak09916_mode mode = AK09916_MODE_PWR_DWN;
+	switch (cfg->mag_freq) {
+	case 0:
+		mode = AK09916_MODE_CONT_1;
+		break;
+	case 1:
+		mode = AK09916_MODE_CONT_2;
+		break;
+	case 2:
+		mode = AK09916_MODE_CONT_3;
+		break;
+	case 3:
+		mode = AK09916_MODE_CONT_4;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	/*Setting operation mode of the magnetometer*/
-	// TODO allow changing mode in configuration
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_DO, AK09916_MODE_CONT_4);
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_DO, mode);
 	if (err) {
 		return err;
 	}
 
-	err = icm20948_execute_rw(dev, AK09916_CNTL2, true);
+	err = icm20948_mst_rw(dev, AK09916_CNTL2, true);
 	if (err) {
 		return err;
 	}
@@ -482,21 +487,6 @@ static int icm20948_mag_config(const struct device *dev)
 	}
 
 	k_msleep(100);
-
-	err = icm20948_bank_select(dev, 0);
-	if (err) {
-		return err;
-	}
-
-	uint8_t stuff[9];
-	err = i2c_burst_read_dt(&cfg->i2c, EXT_SLV_SENS_DATA_00, stuff, 9);
-	if (err) {
-		return err;
-	}
-
-	for (int i = 0; i < 9; i++) {
-		LOG_INF("Data at index %d %d", i, stuff[i]);
-	}
 
 	LOG_INF("AK09916 configured");
 
@@ -533,7 +523,8 @@ static int icm20948_init(const struct device *dev)
 	static const struct icm20948_config icm20948_config_##inst = {                             \
 		.i2c = I2C_DT_SPEC_INST_GET(inst),                                                 \
 		.accel_fs = DT_INST_ENUM_IDX(inst, accel_fs),                                      \
-		.gyro_fs = DT_INST_ENUM_IDX(inst, gyro_fs)};                                       \
+		.gyro_fs = DT_INST_ENUM_IDX(inst, gyro_fs),                                        \
+		.mag_freq = DT_INST_ENUM_IDX(inst, mag_freq)};                                     \
                                                                                                    \
 	SENSOR_DEVICE_DT_INST_DEFINE(inst, icm20948_init, NULL, &icm20948_data_##inst,             \
 				     &icm20948_config_##inst, POST_KERNEL,                         \
