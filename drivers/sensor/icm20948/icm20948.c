@@ -22,6 +22,10 @@
 // Created by Lazaro O'Farrill on 09/03/2023.
 //
 
+#define ICM20948_REG_I2C_SLV4_CTRL_VAL 0x80
+#define ICM20948_I2C_MST_STS_SLV4_DONE BIT(4)
+#define I2C_READ_FLAG                  BIT(7)
+
 LOG_MODULE_REGISTER(ICM20948, CONFIG_SENSOR_LOG_LEVEL);
 
 static int icm20948_bank_select(const struct device *dev, uint8_t bank)
@@ -336,18 +340,68 @@ static int icm20948_accel_config(const struct device *dev)
 	return 0;
 }
 
+static int icm20948_execute_rw(const struct device *dev, uint8_t reg, bool write)
+{
+	/* Instruct the ICM20948 to access over its external i2c bus
+	 * given device register with given details
+	 */
+	const struct icm20948_config *cfg = dev->config;
+	uint8_t mode_bit = 0x00;
+	uint8_t status;
+	int ret;
+
+	if (!write) {
+		mode_bit = I2C_READ_FLAG;
+	}
+
+	/* Set target i2c address */
+	ret = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_ADDR, AK09916_I2C_ADDR | mode_bit);
+	if (ret < 0) {
+		LOG_ERR("Failed to write i2c target slave address.");
+		return ret;
+	}
+
+	/* Set target i2c register */
+	ret = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_REG, reg);
+	if (ret < 0) {
+		LOG_ERR("Failed to write i2c target slave register.");
+		return ret;
+	}
+
+	/* Initiate transfer  */
+	ret = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_CTRL, ICM20948_REG_I2C_SLV4_CTRL_VAL);
+	if (ret < 0) {
+		LOG_ERR("Failed to initiate i2c slave transfer.");
+		return ret;
+	}
+
+	// 	/* Wait for a transfer to be ready */
+	// 	do {
+	// 		ret = i2c_reg_read_byte_dt(&cfg->i2c, I2C_MST_STATUS, &status);
+	// 		if (ret < 0) {
+	// 			LOG_ERR("Waiting for slave failed.");
+	// 			return ret;
+	// 		}
+	// 	} while (!(status & ICM20948_I2C_MST_STS_SLV4_DONE));
+
+	return 0;
+}
+
 static int icm20948_i2c_master_enable(const struct device *dev, bool enable)
 {
 	const struct icm20948_config *cfg = dev->config;
-	icm20948_bank_select(dev, 0);
+	int err = icm20948_bank_select(dev, 0);
+	if (err) {
+		return err;
+	}
 
-	int err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), (enable) << 5);
+	err = i2c_reg_update_byte_dt(&cfg->i2c, USER_CTRL, BIT(5), enable << 5);
 	if (err) {
 		LOG_ERR("Error enabling I2C_MASTER.\n");
 		return err;
 	}
 
-	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, BIT(1), !enable << 1);
+	int ret = i2c_reg_update_byte_dt(&cfg->i2c, INT_PIN_CFG, BIT(1), (!enable) << 1);
 	if (ret) {
 		return ret;
 	}
@@ -355,9 +409,12 @@ static int icm20948_i2c_master_enable(const struct device *dev, bool enable)
 	return 0;
 }
 
+#define MULT_MST_EN   BIT(7)
+#define I2C_MST_P_NSR BIT(4)
+#define I2C_MST_CLK   0x07
+
 static int icm20948_mag_config(const struct device *dev)
 {
-
 	const struct icm20948_config *cfg = dev->config;
 
 	int err = icm20948_i2c_master_enable(dev, true);
@@ -367,44 +424,48 @@ static int icm20948_mag_config(const struct device *dev)
 
 	// Set I2C master clock frequency
 	err = icm20948_bank_select(dev, 3);
-	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, GENMASK(3, 0), 0x07);
+	if (err) {
+		return err;
+	}
+
+	// enable odr delay for slave 0
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_MST_DELAY_CTRL, BIT(7) | 0x01);
+	if (err) {
+		return err;
+	}
+
+	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_CTRL, BIT(7) | GENMASK(4, 0),
+				     MULT_MST_EN | I2C_MST_P_NSR | I2C_MST_CLK);
 	if (err) {
 		LOG_ERR("Couldn't set i2c master clock frequency");
 		return err;
 	}
 
-	// Config Magnetometer in continuous mode 4
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, AK09916_I2C_ADDR);
+	// Setting ODR Config
+	err = i2c_reg_update_byte_dt(&cfg->i2c, I2C_MST_ODR_CONFIG, GENMASK(3, 0), 0x03);
+	if (err) {
+		LOG_ERR("Couldn't set ODR config.");
+		return err;
+	}
+
+	/*Setting operation mode of the magnetometer*/
+	// TODO allow changing mode in configuration
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV4_DO, AK09916_MODE_CONT_4);
 	if (err) {
 		return err;
 	}
 
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_CNTL2);
+	err = icm20948_execute_rw(dev, AK09916_CNTL2, true);
 	if (err) {
 		return err;
 	}
 
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_DO, AK09916_MODE_CONT_4);
-	if (err) {
-		return err;
-	}
-
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_CTRL, 0);
-	if (err) {
-		LOG_ERR("Could not configure sensor to read mag data");
-		return err;
-	}
+	k_msleep(100);
 
 	// config magnetometer to read
 	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_ADDR, BIT(7) | AK09916_I2C_ADDR);
 	if (err) {
 		LOG_ERR("Couldn't set read address for AK09916");
-		return err;
-	}
-
-	// configuring mag to read from hxl to st2
-	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_HXL);
-	if (err) {
 		return err;
 	}
 
@@ -414,7 +475,30 @@ static int icm20948_mag_config(const struct device *dev)
 		return err;
 	}
 
-	LOG_INF("AK09916 Initialized");
+	// configuring mag to read from hxl to st2
+	err = i2c_reg_write_byte_dt(&cfg->i2c, I2C_SLV0_REG, AK09916_HXL);
+	if (err) {
+		return err;
+	}
+
+	k_msleep(100);
+
+	err = icm20948_bank_select(dev, 0);
+	if (err) {
+		return err;
+	}
+
+	uint8_t stuff[9];
+	err = i2c_burst_read_dt(&cfg->i2c, EXT_SLV_SENS_DATA_00, stuff, 9);
+	if (err) {
+		return err;
+	}
+
+	for (int i = 0; i < 9; i++) {
+		LOG_INF("Data at index %d %d", i, stuff[i]);
+	}
+
+	LOG_INF("AK09916 configured");
 
 	return 0;
 }
