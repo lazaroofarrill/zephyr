@@ -455,7 +455,6 @@ static int icm20948_mst_rw(const struct device *dev, uint8_t reg, bool write)
 	 */
 	const struct icm20948_config *cfg = dev->config;
 	uint8_t mode_bit = 0x00;
-	uint8_t status;
 	int ret;
 
 	if (!write) {
