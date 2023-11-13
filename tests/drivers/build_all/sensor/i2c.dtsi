@@ -801,6 +801,11 @@ test_i2c_tsl2561: tsl2561@78 {
 	reg = <0x78>;
 };
 
+test_i2c_icm20948: icm20948@69 {
+	compatible = "invensense,icm20948";
+	reg = <0x69>
+	status = "okay";
+}
 test_i2c_lps22df: lps22df@78 {
 	compatible = "st,lps22df";
 	reg = <0x78>;

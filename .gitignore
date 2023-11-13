@@ -82,3 +82,4 @@ ModulesMaintainers.txt
 Nits.txt
 Pylint.txt
 YAMLLint.txt
+cmake-build-*
