@@ -36,7 +36,7 @@ struct icm20948_config {
 	uint8_t mag_freq;
 };
 
-// TODO migrate to Kconfig
+/* TODO migrate to Kconfig */
 typedef enum {
 	ACCEL_DLPFCFG_0 = 0 << 3,
 	ACCEL_DLPFCFG_1 = 1 << 3,
@@ -60,7 +60,7 @@ typedef enum {
 	ACCEL_FCHOICE_ENABLE
 } accel_fchoice;
 
-// TODO migrate to Kconfig
+/* TODO migrate to Kconfig */
 typedef enum {
 	GYRO_FS_250 = 0,
 	GYRO_FS_500 = 1,
@@ -68,7 +68,7 @@ typedef enum {
 	GYRO_FS_2000 = 3,
 } gyro_fs_sel;
 
-// TODO migrate to Kconfig
+/* TODO migrate to Kconfig */
 typedef enum {
 	GYRO_DLPFCFG_0 = 0 << 3,
 	GYRO_DLPFCFG_1 = 1 << 3,
@@ -81,8 +81,8 @@ typedef enum {
 } gyro_dlpfcfg;
 
 typedef enum {
-	GYRO_F_DISABLE, // Disable low pass filter
-	GYRO_F_ENABLE   // Enable low pass filter
+	GYRO_F_DISABLE, /* Disable low pass filter */
+	GYRO_F_ENABLE   /* Enable low pass filter */
 } gyro_fchoice;
 
 typedef enum {
